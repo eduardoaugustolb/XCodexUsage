@@ -1,5 +1,8 @@
 # XClaudeUsage
 
+> [!TIP]
+> **A faster native build is available.** This page documents the original Node.js version (requires Node 22.5+). A drop-in **Rust rewrite** ships as a single static binary (~3.5 MB, no runtime dependencies) on the **[`HighPerformanceXClaudeUsage`](https://github.com/SrDarf/XClaudeUsage/tree/HighPerformanceXClaudeUsage)** branch. It uses the same SQLite and Turso schema, so an existing setup upgrades in place. See its [README](https://github.com/SrDarf/XClaudeUsage/blob/HighPerformanceXClaudeUsage/README.md) and the [Releases](https://github.com/SrDarf/XClaudeUsage/releases) page for prebuilt binaries and a one-line `install.sh`.
+
 > Claude Code statusline that tracks token usage and the 5-hour quota in real time — stays accurate when you run multiple sessions in parallel, via a shared SQLite log. Optional Turso layer keeps the counter consistent across multiple machines.
 
 ---
