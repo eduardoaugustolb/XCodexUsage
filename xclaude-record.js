@@ -126,6 +126,55 @@ function parseAssistantEvents(text, fallbackModel) {
   return out;
 }
 
+// Read one JSONL transcript from its saved byte offset, record any new
+// assistant token-usage rows, and advance the offset. Shared by the main
+// transcript and every subagent/workflow transcript.
+function ingestTranscript(stmts, sessionId, transcriptPath, fallbackModel, deviceLabel, now) {
+  const row = stmts.getOffset.get(transcriptPath);
+  const offset = row?.byte_offset ?? 0;
+  const result = readNewTranscript(transcriptPath, offset);
+  if (!result) return; // file vanished between discovery and read — skip it
+  if (result.text) {
+    const events = parseAssistantEvents(result.text, fallbackModel);
+    for (const ev of events) {
+      for (const [type, field] of TOKEN_FIELDS) {
+        const qty = ev.usage[field] || 0;
+        if (qty > 0) stmts.insertToken.run(sessionId, ev.model, type, qty, now, deviceLabel, ev.uuid);
+      }
+    }
+  }
+  stmts.setOffset.run(transcriptPath, result.newOffset, now);
+}
+
+// Discover the subagent/workflow transcripts belonging to a main session
+// transcript. Claude Code writes Task subagents, deep-research, and ultracode
+// dynamic workflows into a sibling `<session>/subagents/**/agent-*.jsonl` tree
+// (isSidechain:true) that is never folded into the main transcript and whose
+// paths are never handed to the record hook. Returns [] when absent.
+function subagentTranscripts(mainPath) {
+  // `<...>/<session>.jsonl` -> `<...>/<session>/subagents`
+  const ext = path.extname(mainPath);
+  const sessionDir = ext ? mainPath.slice(0, -ext.length) : mainPath;
+  const out = [];
+  collectAgentFiles(path.join(sessionDir, 'subagents'), out, 0);
+  return out;
+}
+
+function collectAgentFiles(dir, out, depth) {
+  // Real tree is at most subagents/workflows/wf_*/agent-*.jsonl; bound recursion.
+  if (depth > 4) return;
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      collectAgentFiles(full, out, depth + 1);
+    } else if (entry.isFile() && entry.name.startsWith('agent-') && entry.name.endsWith('.jsonl')) {
+      out.push(full);
+    }
+  }
+}
+
 function loadCloudConfig() {
   let raw;
   try { raw = fs.readFileSync(CLOUD_CONFIG_PATH, 'utf8'); } catch { return null; }
@@ -386,20 +435,15 @@ async function record(payload) {
     db.exec('BEGIN IMMEDIATE');
     try {
       if (behavior.localWrite) {
-        const row = getOffset.get(transcriptPath);
-        const offset = row?.byte_offset ?? 0;
-        const result = readNewTranscript(transcriptPath, offset);
-        if (result) {
-          if (result.text) {
-            const events = parseAssistantEvents(result.text, fallbackModel);
-            for (const ev of events) {
-              for (const [type, field] of TOKEN_FIELDS) {
-                const qty = ev.usage[field] || 0;
-                if (qty > 0) insertToken.run(sessionId, ev.model, type, qty, now, localDeviceLabel, ev.uuid);
-              }
-            }
-          }
-          setOffset.run(transcriptPath, result.newOffset, now);
+        const stmts = { getOffset, setOffset, insertToken };
+        // Main session transcript.
+        ingestTranscript(stmts, sessionId, transcriptPath, fallbackModel, localDeviceLabel, now);
+        // Subagent + workflow transcripts (deep-research, ultracode dynamic
+        // workflows, plain Task subagents) live in a sibling
+        // `<session>/subagents/**/agent-*.jsonl` tree the hook never points at.
+        // Same per-path offset tracking and (message_uuid, token_type) dedup.
+        for (const sub of subagentTranscripts(transcriptPath)) {
+          ingestTranscript(stmts, sessionId, sub, fallbackModel, localDeviceLabel, now);
         }
       }
       db.exec('COMMIT');
