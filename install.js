@@ -62,18 +62,17 @@ function hookCommand(scriptName) {
   return `node "${hookPath}"`;
 }
 
-function isXClaudeStatusline(s) {
+function isXClaudeCommand(obj, scriptName) {
   return Boolean(
-    s && typeof s === 'object' && typeof s.command === 'string' &&
-      s.command.includes('xclaude-usage.js'),
+    obj && typeof obj === 'object' && typeof obj.command === 'string' &&
+      obj.command.includes(scriptName),
   );
 }
 
-function isXClaudeHookEntry(entry) {
-  return Boolean(
-    entry && typeof entry === 'object' && typeof entry.command === 'string' &&
-      entry.command.includes('xclaude-record.js'),
-  );
+function atomicWrite(destPath, body) {
+  const tmp = `${destPath}.write-${process.pid}`;
+  fs.writeFileSync(tmp, body);
+  fs.renameSync(tmp, destPath);
 }
 
 function httpRequest(url, { method = 'GET', headers = {} } = {}) {
@@ -157,9 +156,7 @@ async function downloadFile(url, destPath, prevETag) {
     throw new Error(`HTTP ${r.statusCode} for ${url}`);
   }
   fs.mkdirSync(path.dirname(destPath), { recursive: true });
-  const tmp = `${destPath}.download-${process.pid}`;
-  fs.writeFileSync(tmp, r.body);
-  fs.renameSync(tmp, destPath);
+  atomicWrite(destPath, r.body);
   return { skipped: false, etag: newETag };
 }
 
@@ -185,14 +182,6 @@ function readSettings() {
   }
 }
 
-function backupSettings() {
-  if (!fs.existsSync(SETTINGS_PATH)) return null;
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const dest = `${SETTINGS_PATH}.backup-${stamp}`;
-  fs.copyFileSync(SETTINGS_PATH, dest);
-  return dest;
-}
-
 function writeSettingsIfChanged(obj) {
   const body = `${JSON.stringify(obj, null, 2)}\n`;
   let originalBody = null;
@@ -207,9 +196,7 @@ function writeSettingsIfChanged(obj) {
     fs.copyFileSync(SETTINGS_PATH, backup);
   }
   fs.mkdirSync(CLAUDE_DIR, { recursive: true });
-  const tmp = `${SETTINGS_PATH}.write-${process.pid}`;
-  fs.writeFileSync(tmp, body);
-  fs.renameSync(tmp, SETTINGS_PATH);
+  atomicWrite(SETTINGS_PATH, body);
   return { changed: true, backup };
 }
 
@@ -220,7 +207,7 @@ function ensureXClaudeStatusline(settings) {
     settings.statusLine = desired;
     return { action: 'created' };
   }
-  if (isXClaudeStatusline(existing)) {
+  if (isXClaudeCommand(existing, 'xclaude-usage.js')) {
     settings.statusLine = { ...existing, ...desired };
     return { action: 'updated' };
   }
@@ -246,7 +233,7 @@ function ensureXClaudeHooks(settings, events) {
     for (const group of list) {
       if (!group || !Array.isArray(group.hooks)) continue;
       for (let i = 0; i < group.hooks.length; i++) {
-        if (isXClaudeHookEntry(group.hooks[i])) {
+        if (isXClaudeCommand(group.hooks[i], 'xclaude-record.js')) {
           group.hooks[i] = { ...group.hooks[i], ...desiredEntry };
           touched = true;
         }
@@ -265,6 +252,22 @@ function ensureXClaudeHooks(settings, events) {
 
 function ask(rl, question) {
   return new Promise((resolve) => rl.question(question, (a) => resolve(a)));
+}
+
+async function askRequired(rl, name, question, validate) {
+  for (;;) {
+    const answer = (await ask(rl, question)).trim();
+    if (!answer) {
+      fail(`${name} cannot be empty.`);
+      continue;
+    }
+    const error = validate ? validate(answer) : null;
+    if (error) {
+      fail(error);
+      continue;
+    }
+    return answer;
+  }
 }
 
 function readExistingCloudConfig() {
@@ -324,28 +327,14 @@ async function promptCloud(rl) {
       'instructions in README.md, section "Multi-device sync"). The installer\n' +
       'will NOT create the database for you — it only stores the credentials.\n',
   );
-  let libsql_url = '';
-  while (!libsql_url) {
-    libsql_url = (await ask(rl, 'libsql_url (libsql://... or https://...): ')).trim();
-    if (!libsql_url) {
-      fail('libsql_url cannot be empty.');
-      continue;
-    }
-    if (!libsql_url.startsWith('libsql://') && !libsql_url.startsWith('https://')) {
-      fail('libsql_url must start with libsql:// or https://');
-      libsql_url = '';
-    }
-  }
-  let auth_token = '';
-  while (!auth_token) {
-    auth_token = (await ask(rl, 'auth_token: ')).trim();
-    if (!auth_token) fail('auth_token cannot be empty.');
-  }
-  let device_id = '';
-  while (!device_id) {
-    device_id = (await ask(rl, 'device_id (e.g. luka-laptop): ')).trim();
-    if (!device_id) fail('device_id cannot be empty.');
-  }
+  const libsql_url = await askRequired(
+    rl, 'libsql_url', 'libsql_url (libsql://... or https://...): ',
+    (v) => (v.startsWith('libsql://') || v.startsWith('https://'))
+      ? null
+      : 'libsql_url must start with libsql:// or https://',
+  );
+  const auth_token = await askRequired(rl, 'auth_token', 'auth_token: ');
+  const device_id = await askRequired(rl, 'device_id', 'device_id (e.g. luka-laptop): ');
   return { enabled: true, libsql_url, auth_token, device_id };
 }
 
@@ -368,9 +357,7 @@ function writeCloudConfig(cloud) {
       }
     } catch (_) {}
   }
-  const tmp = `${CLOUD_CONFIG_PATH}.write-${process.pid}`;
-  fs.writeFileSync(tmp, body);
-  fs.renameSync(tmp, CLOUD_CONFIG_PATH);
+  atomicWrite(CLOUD_CONFIG_PATH, body);
   return { skipped: false };
 }
 
@@ -427,7 +414,7 @@ async function main() {
   info(`reading ${SETTINGS_PATH}...`);
   const settings = readSettings();
 
-  if (settings.statusLine !== undefined && !isXClaudeStatusline(settings.statusLine)) {
+  if (settings.statusLine !== undefined && !isXClaudeCommand(settings.statusLine, 'xclaude-usage.js')) {
     abort(
       `a non-XClaude statusLine is already configured in ${SETTINGS_PATH}. ` +
         `Refusing to overwrite it. Remove or rename it manually, then re-run.`,
