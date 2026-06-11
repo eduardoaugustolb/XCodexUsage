@@ -208,16 +208,16 @@ function getCloudDeviceId(db, configDeviceId) {
   return db.prepare("SELECT value FROM cloud_state WHERE key = 'device_id'").get().value;
 }
 
-function getCloudCursor(db) {
-  const row = db.prepare("SELECT value FROM cloud_state WHERE key = 'last_remote_id'").get();
+function getCloudStateNumber(db, key) {
+  const row = db.prepare('SELECT value FROM cloud_state WHERE key = ?').get(key);
   return row ? Number(row.value) || 0 : 0;
 }
 
-function setCloudCursor(db, id) {
+function setCloudState(db, key, value) {
   db.prepare(`
-    INSERT INTO cloud_state (key, value) VALUES ('last_remote_id', ?)
+    INSERT INTO cloud_state (key, value) VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
-  `).run(String(id));
+  `).run(key, String(value));
 }
 
 function getOrInitPushCursor(db) {
@@ -226,41 +226,28 @@ function getOrInitPushCursor(db) {
   // First run: skip whatever already exists locally so we don't retroactively
   // flood the cloud with everything since install. New rows from now on get pushed.
   const max = Number(db.prepare('SELECT COALESCE(MAX(id), 0) AS m FROM token_usage').get().m) || 0;
-  db.prepare("INSERT INTO cloud_state (key, value) VALUES ('last_pushed_id', ?)").run(String(max));
+  setCloudState(db, 'last_pushed_id', max);
   return max;
 }
 
-function setPushCursor(db, id) {
-  db.prepare(`
-    INSERT INTO cloud_state (key, value) VALUES ('last_pushed_id', ?)
-    ON CONFLICT(key) DO UPDATE SET value = excluded.value
-  `).run(String(id));
-}
-
-function getLastCleanupAt(db) {
-  const row = db.prepare("SELECT value FROM cloud_state WHERE key = 'last_cleanup_at'").get();
-  return row ? Number(row.value) || 0 : 0;
-}
-
-function setLastCleanupAt(db, ts) {
-  db.prepare(`
-    INSERT INTO cloud_state (key, value) VALUES ('last_cleanup_at', ?)
-    ON CONFLICT(key) DO UPDATE SET value = excluded.value
-  `).run(String(ts));
-}
-
-function runLocalRetentionCleanup(db, now) {
-  const cutoff = now - RETENTION_SECONDS;
+function inTransaction(db, fn) {
   db.exec('BEGIN IMMEDIATE');
   try {
-    db.prepare('DELETE FROM token_usage WHERE executed_at < ?').run(cutoff);
-    db.prepare('DELETE FROM cloud_cache WHERE executed_at < ?').run(cutoff);
-    setLastCleanupAt(db, now);
+    fn();
     db.exec('COMMIT');
   } catch (e) {
     try { db.exec('ROLLBACK'); } catch {}
     throw e;
   }
+}
+
+function runLocalRetentionCleanup(db, now) {
+  const cutoff = now - RETENTION_SECONDS;
+  inTransaction(db, () => {
+    db.prepare('DELETE FROM token_usage WHERE executed_at < ?').run(cutoff);
+    db.prepare('DELETE FROM cloud_cache WHERE executed_at < ?').run(cutoff);
+    setCloudState(db, 'last_cleanup_at', now);
+  });
 }
 
 function toLibsqlValue(v) {
@@ -317,7 +304,7 @@ async function syncCloud(config, db, deviceId, doPush, doPull, cleanupDue) {
   const outboxRows = doPush
     ? db.prepare('SELECT event_id, payload FROM cloud_outbox ORDER BY created_at ASC').all()
     : [];
-  const lastRemoteId = doPull ? getCloudCursor(db) : 0;
+  const lastRemoteId = doPull ? getCloudStateNumber(db, 'last_remote_id') : 0;
   const now = Math.floor(Date.now() / 1000);
 
   const statements = [];
@@ -373,8 +360,9 @@ async function syncCloud(config, db, deviceId, doPush, doPull, cleanupDue) {
     pullRows = decodeRows(results[pullStatementIndex]?.response?.result);
   }
 
-  db.exec('BEGIN IMMEDIATE');
-  try {
+  // Pulled rows are already filtered to the retention window; aged-out
+  // cloud_cache rows are reaped by the daily runLocalRetentionCleanup sweep.
+  inTransaction(db, () => {
     if (outboxRows.length) {
       const del = db.prepare('DELETE FROM cloud_outbox WHERE event_id = ?');
       for (const row of outboxRows) del.run(row.event_id);
@@ -394,14 +382,9 @@ async function syncCloud(config, db, deviceId, doPush, doPull, cleanupDue) {
         );
         if (r.id > maxId) maxId = r.id;
       }
-      if (maxId > lastRemoteId) setCloudCursor(db, maxId);
+      if (maxId > lastRemoteId) setCloudState(db, 'last_remote_id', maxId);
     }
-    db.prepare('DELETE FROM cloud_cache WHERE executed_at < ?').run(now - RETENTION_SECONDS);
-    db.exec('COMMIT');
-  } catch (e) {
-    try { db.exec('ROLLBACK'); } catch {}
-    throw e;
-  }
+  });
 }
 
 async function record(payload) {
@@ -432,8 +415,7 @@ async function record(payload) {
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
-    db.exec('BEGIN IMMEDIATE');
-    try {
+    inTransaction(db, () => {
       if (behavior.localWrite) {
         const stmts = { getOffset, setOffset, insertToken };
         // Main session transcript.
@@ -446,13 +428,9 @@ async function record(payload) {
           ingestTranscript(stmts, sessionId, sub, fallbackModel, localDeviceLabel, now);
         }
       }
-      db.exec('COMMIT');
-    } catch (e) {
-      try { db.exec('ROLLBACK'); } catch {}
-      throw e;
-    }
+    });
 
-    const cleanupDue = (now - getLastCleanupAt(db)) >= CLEANUP_INTERVAL_SECONDS;
+    const cleanupDue = (now - getCloudStateNumber(db, 'last_cleanup_at')) >= CLEANUP_INTERVAL_SECONDS;
     if (cleanupDue) {
       try { runLocalRetentionCleanup(db, now); } catch (e) { logErr(e); }
     }
@@ -468,8 +446,7 @@ async function record(payload) {
     // PostToolUse and SubagentStart write locally but don't push, so the
     // next Stop / SubagentStop closes the books on accumulated rows.
     if (behavior.push) {
-      db.exec('BEGIN IMMEDIATE');
-      try {
+      inTransaction(db, () => {
         const lastPushed = getOrInitPushCursor(db);
         const windowStart = now - RETENTION_SECONDS;
         const groups = db.prepare(`
@@ -512,12 +489,8 @@ async function record(payload) {
           db.prepare('SELECT COALESCE(MAX(id), ?) AS m FROM token_usage WHERE id > ?')
             .get(lastPushed, lastPushed).m
         );
-        if (newCursor > lastPushed) setPushCursor(db, newCursor);
-        db.exec('COMMIT');
-      } catch (e) {
-        try { db.exec('ROLLBACK'); } catch {}
-        throw e;
-      }
+        if (newCursor > lastPushed) setCloudState(db, 'last_pushed_id', newCursor);
+      });
     }
 
     try {

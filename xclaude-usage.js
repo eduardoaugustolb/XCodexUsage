@@ -4,88 +4,67 @@ const os = require('os');
 
 const DB_PATH = path.join(os.homedir(), '.claude', 'data', 'xclaude-usage.db');
 const EMPTY_ENTRY = () => ({ offset: 0, input: 0, output: 0, cache_creation: 0, cache_read: 0 });
+const FIVE_HOUR_SECONDS = 5 * 3600;
+const SEVEN_DAY_SECONDS = 7 * 24 * 3600;
 
-function writeFiveHourWindow(fiveHour) {
-  if (!fiveHour
-      || typeof fiveHour.resets_at !== 'number'
-      || typeof fiveHour.used_percentage !== 'number') return;
-  if (!fs.existsSync(DB_PATH)) return;
+// Start-column names differ between the two tables (start_at vs starts_at);
+// keep them as-is for compatibility with databases created by older versions.
+const RATE_LIMIT_WINDOWS = [
+  { key: 'five_hour', table: 'five_hour_window', startCol: 'start_at', seconds: FIVE_HOUR_SECONDS },
+  { key: 'seven_day', table: 'seven_day_window', startCol: 'starts_at', seconds: SEVEN_DAY_SECONDS },
+];
 
-  let DatabaseSync;
-  try { ({ DatabaseSync } = require('node:sqlite')); } catch { return; }
-
-  let db;
-  try {
-    db = new DatabaseSync(DB_PATH);
-    db.exec('PRAGMA busy_timeout = 2000;');
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS five_hour_window (
-        id              INTEGER PRIMARY KEY CHECK (id = 1),
-        resets_at       INTEGER NOT NULL,
-        start_at        INTEGER NOT NULL,
-        used_percentage REAL    NOT NULL,
-        updated_at      INTEGER NOT NULL
-      )
-    `);
-
-    const resetsAt = fiveHour.resets_at;
-    const startAt  = resetsAt - 5 * 3600;
-    const now      = Math.floor(Date.now() / 1000);
-
-    db.prepare(`
-      INSERT INTO five_hour_window (id, resets_at, start_at, used_percentage, updated_at)
-      VALUES (1, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        resets_at       = excluded.resets_at,
-        start_at        = excluded.start_at,
-        used_percentage = excluded.used_percentage,
-        updated_at      = excluded.updated_at
-    `).run(resetsAt, startAt, fiveHour.used_percentage, now);
-  } catch {
-  } finally {
-    if (db) try { db.close(); } catch {}
-  }
+function getDatabaseSync() {
+  try { return require('node:sqlite').DatabaseSync; } catch { return null; }
 }
 
-function writeSevenDayWindow(sevenDay) {
-  if (!sevenDay
-      || typeof sevenDay.resets_at !== 'number'
-      || typeof sevenDay.used_percentage !== 'number') return;
+function closeQuietly(db) {
+  if (db) try { db.close(); } catch {}
+}
+
+function writeRateLimitWindows(rateLimits) {
+  const jobs = [];
+  for (const win of RATE_LIMIT_WINDOWS) {
+    const data = rateLimits?.[win.key];
+    if (data
+        && typeof data.resets_at === 'number'
+        && typeof data.used_percentage === 'number') jobs.push([win, data]);
+  }
+  if (jobs.length === 0) return;
   if (!fs.existsSync(DB_PATH)) return;
 
-  let DatabaseSync;
-  try { ({ DatabaseSync } = require('node:sqlite')); } catch { return; }
+  const DatabaseSync = getDatabaseSync();
+  if (!DatabaseSync) return;
 
   let db;
   try {
     db = new DatabaseSync(DB_PATH);
     db.exec('PRAGMA busy_timeout = 2000;');
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS seven_day_window (
-        id              INTEGER PRIMARY KEY CHECK (id = 1),
-        resets_at       INTEGER NOT NULL,
-        starts_at       INTEGER NOT NULL,
-        used_percentage REAL    NOT NULL,
-        updated_at      INTEGER NOT NULL
-      )
-    `);
+    const now = Math.floor(Date.now() / 1000);
 
-    const resetsAt = sevenDay.resets_at;
-    const startsAt = resetsAt - 7 * 24 * 3600;
-    const now      = Math.floor(Date.now() / 1000);
-
-    db.prepare(`
-      INSERT INTO seven_day_window (id, resets_at, starts_at, used_percentage, updated_at)
-      VALUES (1, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        resets_at       = excluded.resets_at,
-        starts_at       = excluded.starts_at,
-        used_percentage = excluded.used_percentage,
-        updated_at      = excluded.updated_at
-    `).run(resetsAt, startsAt, sevenDay.used_percentage, now);
+    for (const [{ table, startCol, seconds }, data] of jobs) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS ${table} (
+          id              INTEGER PRIMARY KEY CHECK (id = 1),
+          resets_at       INTEGER NOT NULL,
+          ${startCol}     INTEGER NOT NULL,
+          used_percentage REAL    NOT NULL,
+          updated_at      INTEGER NOT NULL
+        )
+      `);
+      db.prepare(`
+        INSERT INTO ${table} (id, resets_at, ${startCol}, used_percentage, updated_at)
+        VALUES (1, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          resets_at       = excluded.resets_at,
+          ${startCol}     = excluded.${startCol},
+          used_percentage = excluded.used_percentage,
+          updated_at      = excluded.updated_at
+      `).run(data.resets_at, data.resets_at - seconds, data.used_percentage, now);
+    }
   } catch {
   } finally {
-    if (db) try { db.close(); } catch {}
+    closeQuietly(db);
   }
 }
 
@@ -93,11 +72,11 @@ function readWindowTokensFromDB(fiveHour) {
   if (!fiveHour?.resets_at) return null;
   if (!fs.existsSync(DB_PATH)) return null;
 
-  let DatabaseSync;
-  try { ({ DatabaseSync } = require('node:sqlite')); } catch { return null; }
+  const DatabaseSync = getDatabaseSync();
+  if (!DatabaseSync) return null;
 
   const end = fiveHour.resets_at;
-  const start = end - 5 * 3600;
+  const start = end - FIVE_HOUR_SECONDS;
 
   let db;
   try {
@@ -144,7 +123,7 @@ function readWindowTokensFromDB(fiveHour) {
   } catch {
     return null;
   } finally {
-    if (db) try { db.close(); } catch {}
+    closeQuietly(db);
   }
 }
 
@@ -265,15 +244,13 @@ function runStatusline() {
     try {
       const data = JSON.parse(input);
 
-
       const model = data.model?.display_name || 'Claude';
       const dir = data.workspace?.current_dir || process.cwd();
       const session = data.session_id || '';
 
       let tokenStr = '';
       const fiveHour = data.rate_limits?.five_hour;
-      writeFiveHourWindow(fiveHour);
-      writeSevenDayWindow(data.rate_limits?.seven_day);
+      writeRateLimitWindows(data.rate_limits);
       const tokens = readWindowTokensFromDB(fiveHour) || readSessionTokens(data.transcript_path, session);
 
       if (fiveHour != null && fiveHour.used_percentage != null) {
