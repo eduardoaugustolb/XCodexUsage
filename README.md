@@ -39,26 +39,34 @@ claude-sonnet-4-6 │ my-project │ ██████░░░░ out:427.0k/7
 
 ## Quick install (automated)
 
-Cross-platform Node.js installer. Pick the line for your shell:
+Cross-platform Node.js installer. Pick the command for your shell:
 
-macOS / Linux:
+**macOS / Linux** (bash, zsh):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/SrDarf/XClaudeUsage/main/install.js | node
 ```
 
-Windows (PowerShell):
+**Windows — PowerShell** (5.1 or 7) — download, then run:
 ```powershell
-irm https://raw.githubusercontent.com/SrDarf/XClaudeUsage/main/install.js | node
+irm https://raw.githubusercontent.com/SrDarf/XClaudeUsage/main/install.js -OutFile "$env:TEMP\xclaude-install.js"; node "$env:TEMP\xclaude-install.js"
 ```
 
-The installer is interactive: it reads your answers from the terminal even when piped from `curl` / `irm` (it talks to the controlling TTY directly). If for some reason that doesn't work in your environment, just download it first and run it normally:
+**Windows — cmd.exe**:
+```bat
+curl -fsSL https://raw.githubusercontent.com/SrDarf/XClaudeUsage/main/install.js | node
+```
+
+> **Why download-then-run on PowerShell?** The one-line `irm ... | node` pipe works but is *degraded* there: Windows PowerShell 5.1 pipes the script to `node` as ASCII, which turns the installer's box-drawing/check glyphs into `?`, and a piped stdin is not a TTY, so the cloud-sync question drops to a plain `[y/N]` prompt instead of the arrow-key selector. Downloading the file first keeps the glyphs intact **and** gives you the arrow-key selector (your `process.stdin` is then the real console). On PowerShell 5.1, if `irm` fails with an SSL error, run `[Net.ServicePointManager]::SecurityProtocol = 'Tls12'` first.
+
+The installer reads your answers from the real keyboard (the controlling terminal), so the piped `curl ... | node` form stays answerable on macOS/Linux and cmd.exe. The arrow-key selector appears only when stdin is a real console (download-then-run, or a direct `node install.js`); piped installs use the `[y/N]` fallback. To force the full experience anywhere, download then run:
 
 ```bash
 # macOS / Linux
 curl -fsSL https://raw.githubusercontent.com/SrDarf/XClaudeUsage/main/install.js -o install.js && node install.js
-
-# Windows (PowerShell)
-irm https://raw.githubusercontent.com/SrDarf/XClaudeUsage/main/install.js -OutFile install.js; node install.js
+```
+```bat
+:: Windows — cmd.exe
+curl -fsSL https://raw.githubusercontent.com/SrDarf/XClaudeUsage/main/install.js -o install.js && node install.js
 ```
 
 What it does:
