@@ -5,7 +5,11 @@ Plugin para o Codex CLI que lê os eventos `token_count` dos transcripts locais 
 O Codex não tem a API de `statusLine` do Claude Code. Por isso o equivalente é um plugin de hooks: ele atualiza o snapshot no fim de cada interação e mostra um painel ASCII de quota, reset e contexto no início e no fim de cada interação.
 
 ```text
-Codex │ ██░░░░░░░░ 16% · reinicia:6d02h │ sessões:3 │ entrada:4.31M │ cache:3.96M │ saída:33.3k │ raciocínio:7.7k
+Stop
++--------------------------------------------------+
+| XCODEX USAGE                                     |
+| quota: 7d 16% | reset: 6d02h | context: 42%      |
++--------------------------------------------------+
 ```
 
 ## Instalação manual
