@@ -1,8 +1,6 @@
 name: ci
 
-# Minimal quality gate for the Node.js implementation on the main branch.
-# This file lives only on main; the Rust rewrite (HighPerformanceXClaudeUsage
-# branch) has its own ci.yml running fmt/clippy/test/audit.
+# Minimal quality gate for the Codex plugin on the main branch.
 on:
   push:
     branches: [main]
@@ -14,7 +12,7 @@ permissions:
 
 jobs:
   check:
-    name: node --check + statusline smoke
+    name: plugin syntax + smoke
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,17 +21,17 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Syntax-check every script
+      - name: Syntax-check plugin scripts
         run: |
-          for f in *.js; do
+          for f in plugins/xcodex-usage/scripts/*.js; do
             echo "checking $f"
             node --check "$f"
           done
 
-      - name: Statusline smoke (must not crash on empty or typical input)
+      - name: Plugin smoke (must not crash without a Codex transcript)
         run: |
-          echo '{}' | node xclaude-usage.js
+          echo '{}' | node plugins/xcodex-usage/scripts/record.js
           echo
-          printf '%s' '{"model":{"display_name":"claude-sonnet-4-6"},"workspace":{"current_dir":"/tmp"},"session_id":"smoke","transcript_path":"/tmp/does-not-exist.jsonl"}' | node xclaude-usage.js
+          node plugins/xcodex-usage/scripts/usage.js
           echo
-          echo "statusline smoke ok"
+          echo "plugin smoke ok"
