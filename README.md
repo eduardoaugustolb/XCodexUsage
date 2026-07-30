@@ -52,6 +52,10 @@ Valide o manifesto antes de instalar:
 python3 /home/eduardoaugusto/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/xcodex-usage
 ```
 
+## Instalação por agente de IA
+
+Agentes podem seguir o procedimento autocontido em [INSTALL_GUIDE_AI.md](INSTALL_GUIDE_AI.md). Basta enviar ao agente o link raw desse arquivo com um pedido de instalar, atualizar ou desinstalar.
+
 ## Créditos
 
 XCodexUsage é uma migração independente de [XClaudeUsage](https://github.com/SrDarf/XClaudeUsage), criado por [SrDarf](https://github.com/SrDarf). A ideia original, a arquitetura de acompanhamento local e o licenciamento MIT permanecem atribuídos ao autor e ao repositório de origem.
