@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 'use strict';
 
-// Read-only hook used by Stop and SessionStart. Keeping it side-effect free
-// prevents a presentation failure from ever affecting a Codex turn.
+// SessionStart and Stop hook. Its output is always valid JSON, including when
+// a transcript cannot be read; Codex requires that from Stop hooks.
 
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const crypto = require('node:crypto');
 
-const snapshotsPath = path.join(os.homedir(), '.codex', 'data', 'xcodex-usage', 'snapshots.json');
+const dataDir = path.join(os.homedir(), '.codex', 'data', 'xcodex-usage');
+const snapshotsPath = path.join(dataDir, 'snapshots.json');
 
 process.stdout.on('error', () => { process.exitCode = 0; });
 process.stdin.on('error', () => { process.exitCode = 0; });
@@ -49,6 +51,22 @@ function newestSavedSnapshot() {
   }
 }
 
+function saveSnapshot(transcriptPath, snapshot) {
+  if (!transcriptPath || !snapshot) return;
+  try {
+    let state;
+    try { state = JSON.parse(fs.readFileSync(snapshotsPath, 'utf8')); } catch { state = { snapshots: {} }; }
+    if (!state.snapshots || typeof state.snapshots !== 'object') state.snapshots = {};
+    state.snapshots[transcriptPath] = { ...snapshot, recorded_at: new Date().toISOString() };
+    fs.mkdirSync(dataDir, { recursive: true });
+    const temp = `${snapshotsPath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+    fs.writeFileSync(temp, JSON.stringify(state, null, 2) + '\n');
+    fs.renameSync(temp, snapshotsPath);
+  } catch {
+    // Persisting a cache must never interfere with a completed turn.
+  }
+}
+
 function countdown(epoch) {
   const seconds = Math.max(0, Number(epoch) - Math.floor(Date.now() / 1000));
   const days = Math.floor(seconds / 86400);
@@ -77,9 +95,11 @@ process.stdin.on('data', (chunk) => { input += chunk; });
 process.stdin.on('end', () => {
   try {
     const hook = JSON.parse(input || '{}');
-    const snapshot = newestSnapshot(hook.transcript_path) || newestSavedSnapshot();
-    if (snapshot) process.stdout.write(JSON.stringify({ systemMessage: panel(snapshot) }));
+    const liveSnapshot = newestSnapshot(hook.transcript_path);
+    const snapshot = liveSnapshot || newestSavedSnapshot();
+    if (hook.hook_event_name === 'Stop') saveSnapshot(hook.transcript_path, liveSnapshot);
+    process.stdout.write(JSON.stringify(snapshot ? { continue: true, systemMessage: panel(snapshot) } : { continue: true }));
   } catch {
-    // A UI-only hook is always a successful no-op on malformed or absent data.
+    try { process.stdout.write(JSON.stringify({ continue: true })); } catch {}
   }
 });

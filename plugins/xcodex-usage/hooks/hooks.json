@@ -19,16 +19,6 @@
           }
         ]
       }
-    ],
-    "PostToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node ${PLUGIN_ROOT}/scripts/record.js"
-          }
-        ]
-      }
     ]
   }
 }

@@ -2,7 +2,7 @@
 
 Plugin para o Codex CLI que lê os eventos `token_count` dos transcripts locais e mostra um resumo das sessões, incluindo o percentual oficial da cota da conta e o horário de redefinição.
 
-O Codex não tem a API de `statusLine` do Claude Code. Por isso o equivalente é um plugin de hooks: ele atualiza snapshots após cada ferramenta e mostra um painel ASCII de quota, reset e contexto no início e no fim de cada interação.
+O Codex não tem a API de `statusLine` do Claude Code. Por isso o equivalente é um plugin de hooks: ele atualiza o snapshot no fim de cada interação e mostra um painel ASCII de quota, reset e contexto no início e no fim de cada interação.
 
 ```text
 Codex │ ██░░░░░░░░ 16% · reinicia:6d02h │ sessões:3 │ entrada:4.31M │ cache:3.96M │ saída:33.3k │ raciocínio:7.7k
@@ -62,8 +62,8 @@ node plugins/xcodex-usage/scripts/usage.js
 
 ## Como funciona
 
-- `PostToolUse` executa `scripts/record.js`, que apenas atualiza o snapshot local.
-- `SessionStart` e `Stop` executam `scripts/announce.js`, um hook somente de leitura que renderiza o painel ASCII. Separar as funções evita que uma gravação de telemetria possa falhar a finalização de uma interação.
+- `SessionStart` e `Stop` executam `scripts/announce.js`. O `Stop` lê o transcript e atualiza o snapshot em modo tolerante a falhas; a resposta do hook é sempre JSON válido, mesmo sem dados disponíveis.
+- O plugin não usa `PostToolUse`, evitando um processo extra após cada ferramenta.
 - O recorder lê o último evento `event_msg/token_count` do transcript recebido pelo hook e guarda um snapshot local por sessão.
 - `scripts/usage.js` agrega os snapshots e usa `rate_limits.primary` do Codex para mostrar a cota da conta e o próximo reset.
 
