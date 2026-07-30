@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 'use strict';
 
-// Receives Codex hook JSON on stdin.  The transcript already contains the
-// authoritative token_count events, so we only persist its newest snapshot.
+// Receives Codex hook JSON on stdin. The transcript already contains the
+// authoritative token_count events, so this hook only persists its newest
+// snapshot. Rendering is deliberately handled by announce.js: persistence
+// must never compete with a Stop hook that Codex is waiting to display.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -58,31 +60,6 @@ function loadState() {
   }
 }
 
-function newestSavedSnapshot(state) {
-  return Object.values(state.snapshots || {}).reduce((newest, snapshot) => (
-    !newest || String(snapshot.timestamp) > String(newest.timestamp) ? snapshot : newest
-  ), null);
-}
-
-function countdown(epoch) {
-  const seconds = Math.max(0, Number(epoch) - Math.floor(Date.now() / 1000));
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  return days ? `${days}d${String(hours).padStart(2, '0')}h` : `${hours}h${String(minutes).padStart(2, '0')}m`;
-}
-
-function stopMessage(snapshot) {
-  const total = Number(snapshot.usage?.total_tokens) || 0;
-  const contextWindow = Number(snapshot.context_window) || 0;
-  const context = contextWindow ? `contexto:${Math.min(100, Math.round(total / contextWindow * 100))}%` : null;
-  const quota = snapshot.rate_limits?.primary;
-  const quotaWindow = Number(quota?.window_minutes) || 0;
-  const quotaLabel = quotaWindow ? `cota:${Math.round(quotaWindow / 1440)}d ${Math.round(Number(quota.used_percent) || 0)}%` : null;
-  const reset = quota?.resets_at ? `reset:${countdown(quota.resets_at)}` : null;
-  return ['🟨 XCODEX USAGE', quotaLabel, reset, context].filter(Boolean).join('  │  ');
-}
-
 let input = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { input += chunk; });
@@ -91,22 +68,13 @@ process.stdin.on('end', () => {
     const hook = JSON.parse(input || '{}');
     const transcriptPath = hook.transcript_path;
     const liveSnapshot = newestSnapshot(transcriptPath);
+    if (!liveSnapshot) return;
     const state = loadState();
-    const snapshot = liveSnapshot || newestSavedSnapshot(state);
-    if (!snapshot) return;
 
     if (!state.snapshots || typeof state.snapshots !== 'object') state.snapshots = {};
-    if (liveSnapshot) {
-      fs.mkdirSync(dataDir, { recursive: true });
-      state.snapshots[transcriptPath] = { ...snapshot, recorded_at: new Date().toISOString() };
-      atomicWrite(snapshotsPath, state);
-    }
-
-    // Stop hook output is rendered by Codex as a UI warning.  Do not emit it
-    // for every tool call: PostToolUse runs too often for a useful status read.
-    if (hook.hook_event_name === 'Stop' || hook.hook_event_name === 'SessionStart') {
-      process.stdout.write(JSON.stringify({ systemMessage: stopMessage(snapshot) }));
-    }
+    fs.mkdirSync(dataDir, { recursive: true });
+    state.snapshots[transcriptPath] = { ...liveSnapshot, recorded_at: new Date().toISOString() };
+    atomicWrite(snapshotsPath, state);
   } catch {
     // Hooks must never interrupt a Codex turn.
   }

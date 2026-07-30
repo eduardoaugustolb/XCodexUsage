@@ -2,7 +2,7 @@
 
 Plugin para o Codex CLI que lê os eventos `token_count` dos transcripts locais e mostra um resumo das sessões, incluindo o percentual oficial da cota da conta e o horário de redefinição.
 
-O Codex não tem a API de `statusLine` do Claude Code. Por isso o equivalente é um plugin de hooks: ele atualiza snapshots após cada ferramenta e ao fim de cada interação, e o relatório é exibido sob demanda.
+O Codex não tem a API de `statusLine` do Claude Code. Por isso o equivalente é um plugin de hooks: ele atualiza snapshots após cada ferramenta e mostra um painel ASCII de quota, reset e contexto no início e no fim de cada interação.
 
 ```text
 Codex │ ██░░░░░░░░ 16% · reinicia:6d02h │ sessões:3 │ entrada:4.31M │ cache:3.96M │ saída:33.3k │ raciocínio:7.7k
@@ -62,7 +62,8 @@ node plugins/xcodex-usage/scripts/usage.js
 
 ## Como funciona
 
-- `PostToolUse` e `Stop` executam `scripts/record.js`.
+- `PostToolUse` executa `scripts/record.js`, que apenas atualiza o snapshot local.
+- `SessionStart` e `Stop` executam `scripts/announce.js`, um hook somente de leitura que renderiza o painel ASCII. Separar as funções evita que uma gravação de telemetria possa falhar a finalização de uma interação.
 - O recorder lê o último evento `event_msg/token_count` do transcript recebido pelo hook e guarda um snapshot local por sessão.
 - `scripts/usage.js` agrega os snapshots e usa `rate_limits.primary` do Codex para mostrar a cota da conta e o próximo reset.
 
@@ -70,7 +71,7 @@ Os valores de tokens são totais acumulados pelos transcripts salvos, não uma e
 
 ## Limitações
 
-- Não há extensão pública para substituir a barra de status do TUI do Codex; a saída é intencionalmente um comando separado.
+- Não há extensão pública para aplicar uma cor de fundo própria às mensagens de hook: o Codex controla as cores da TUI. O painel usa bordas ASCII para permanecer legível em qualquer tema.
 - Snapshots são atualizados somente enquanto o plugin está ativo. Excluir `~/.codex/data/xcodex-usage/snapshots.json` reinicia o histórico local.
 
 ## Desenvolvimento
