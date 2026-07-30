@@ -47,7 +47,7 @@ codex plugin list --marketplace xcodex-usage --json
 
 Se o primeiro comando disser que o marketplace já está configurado, isso não é uma falha: siga para `codex plugin add`. Se o plugin já estiver instalado, trate `codex plugin add` como reinstalação e confira a listagem final.
 
-O configurador altera apenas `tui.status_line` em `~/.codex/config.toml` e habilita no rodapé nativo: modelo, contexto, limites de 5h e semanal, tokens usados, branch e diretório. Ao concluir, informe que é necessário reiniciar o Codex para aplicar o rodapé. Depois da primeira interação concluída, o relatório detalhado também pode ser consultado com o script `usage.js` dentro do cache do plugin ou diretamente de um checkout do repositório.
+O configurador altera apenas `tui.status_line` em `~/.codex/config.toml` e habilita no rodapé nativo: modelo, contexto, tokens usados, branch e diretório; limites de 5h e semanal aparecem quando forem fornecidos pela conta. Ao concluir, informe que é necessário reiniciar o Codex para aplicar o rodapé. Depois de cada turno, o hook mostra na TUI a cota efetiva, o tempo até o reset e o percentual do contexto da sessão. O relatório detalhado também pode ser consultado com o script `usage.js` dentro do cache do plugin ou diretamente de um checkout do repositório.
 
 ## Atualizar
 
