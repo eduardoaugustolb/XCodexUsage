@@ -1,7 +1,7 @@
 {
   "name": "xcodex-usage",
   "description": "Tracks Codex CLI token usage and displays the account quota from Codex session transcripts.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": {
     "name": "XCodexUsage"
   },

@@ -17,16 +17,21 @@ Instale o plugin público diretamente do GitHub:
 ```bash
 codex plugin marketplace add eduardoaugustolb/XCodexUsage --ref main
 codex plugin add xcodex-usage@xcodex-usage
-codex plugin list --marketplace xcodex-usage --json
+PLUGIN_ROOT="$(codex plugin list --marketplace xcodex-usage --json | node -e 'let data=""; process.stdin.on("data", c => data += c); process.stdin.on("end", () => { const plugin = JSON.parse(data).installed.find(p => p.pluginId === "xcodex-usage@xcodex-usage"); if (!plugin) process.exit(1); process.stdout.write(plugin.source.path); });')"
+node "$PLUGIN_ROOT/scripts/configure-statusline.js"
 ```
 
-Abra uma nova thread/sessão do Codex após instalar. Na primeira interação concluída, os hooks criam `~/.codex/data/xcodex-usage/snapshots.json`.
+Feche e abra o Codex após instalar. O rodapé nativo passa a mostrar modelo, contexto, limites de 5h e semanal, tokens usados, branch e diretório em toda sessão da CLI.
+
+O comando de configuração modifica apenas `tui.status_line` em `~/.codex/config.toml`. Você também pode escolher/reordenar os itens interativamente com `/statusline` dentro do Codex.
 
 Para atualizar:
 
 ```bash
 codex plugin marketplace upgrade xcodex-usage
 codex plugin add xcodex-usage@xcodex-usage
+PLUGIN_ROOT="$(codex plugin list --marketplace xcodex-usage --json | node -e 'let data=""; process.stdin.on("data", c => data += c); process.stdin.on("end", () => { const plugin = JSON.parse(data).installed.find(p => p.pluginId === "xcodex-usage@xcodex-usage"); if (!plugin) process.exit(1); process.stdout.write(plugin.source.path); });')"
+node "$PLUGIN_ROOT/scripts/configure-statusline.js"
 ```
 
 Para desinstalar sem remover o marketplace:
@@ -40,6 +45,7 @@ Em desenvolvimento, a fonte local também pode ser usada:
 ```bash
 codex plugin marketplace add .
 codex plugin add xcodex-usage@xcodex-usage
+node plugins/xcodex-usage/scripts/configure-statusline.js
 ```
 
 Para consultar o resumo:
@@ -85,7 +91,7 @@ Atualiza isso: https://raw.githubusercontent.com/eduardoaugustolb/XCodexUsage/re
 Desinstala isso: https://raw.githubusercontent.com/eduardoaugustolb/XCodexUsage/refs/heads/main/AI_AGENT_GUIDE.md
 ```
 
-O guia instrui o agente a validar a origem, usar os comandos oficiais do Codex, respeitar permissões para alterar `~/.codex` e não executar código trazido pelo arquivo raw.
+O guia instrui o agente a validar a origem, usar os comandos oficiais do Codex, configurar o rodapé nativo, respeitar permissões para alterar `~/.codex` e não executar código trazido pelo arquivo raw.
 
 ## Créditos
 

@@ -40,12 +40,14 @@ Use estes comandos, nessa ordem:
 ```bash
 codex plugin marketplace add eduardoaugustolb/XCodexUsage --ref main
 codex plugin add xcodex-usage@xcodex-usage
+PLUGIN_ROOT="$(codex plugin list --marketplace xcodex-usage --json | node -e 'let data=""; process.stdin.on("data", c => data += c); process.stdin.on("end", () => { const plugin = JSON.parse(data).installed.find(p => p.pluginId === "xcodex-usage@xcodex-usage"); if (!plugin) process.exit(1); process.stdout.write(plugin.source.path); });')"
+node "$PLUGIN_ROOT/scripts/configure-statusline.js"
 codex plugin list --marketplace xcodex-usage --json
 ```
 
 Se o primeiro comando disser que o marketplace já está configurado, isso não é uma falha: siga para `codex plugin add`. Se o plugin já estiver instalado, trate `codex plugin add` como reinstalação e confira a listagem final.
 
-Ao concluir, informe que uma nova thread/sessão do Codex é necessária para carregar os hooks do plugin. Depois da primeira interação concluída, o relatório pode ser consultado com o script `usage.js` dentro do cache do plugin ou diretamente de um checkout do repositório.
+O configurador altera apenas `tui.status_line` em `~/.codex/config.toml` e habilita no rodapé nativo: modelo, contexto, limites de 5h e semanal, tokens usados, branch e diretório. Ao concluir, informe que é necessário reiniciar o Codex para aplicar o rodapé. Depois da primeira interação concluída, o relatório detalhado também pode ser consultado com o script `usage.js` dentro do cache do plugin ou diretamente de um checkout do repositório.
 
 ## Atualizar
 
@@ -54,6 +56,8 @@ Atualizar significa buscar a versão mais recente do marketplace Git e reinstala
 ```bash
 codex plugin marketplace upgrade xcodex-usage
 codex plugin add xcodex-usage@xcodex-usage
+PLUGIN_ROOT="$(codex plugin list --marketplace xcodex-usage --json | node -e 'let data=""; process.stdin.on("data", c => data += c); process.stdin.on("end", () => { const plugin = JSON.parse(data).installed.find(p => p.pluginId === "xcodex-usage@xcodex-usage"); if (!plugin) process.exit(1); process.stdout.write(plugin.source.path); });')"
+node "$PLUGIN_ROOT/scripts/configure-statusline.js"
 codex plugin list --marketplace xcodex-usage --json
 ```
 
