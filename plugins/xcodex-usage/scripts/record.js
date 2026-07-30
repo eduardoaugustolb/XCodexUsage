@@ -41,6 +41,21 @@ function atomicWrite(file, value) {
   fs.renameSync(temp, file);
 }
 
+function loadState() {
+  try {
+    const state = JSON.parse(fs.readFileSync(snapshotsPath, 'utf8'));
+    return state && typeof state === 'object' ? state : { snapshots: {} };
+  } catch {
+    return { snapshots: {} };
+  }
+}
+
+function newestSavedSnapshot(state) {
+  return Object.values(state.snapshots || {}).reduce((newest, snapshot) => (
+    !newest || String(snapshot.timestamp) > String(newest.timestamp) ? snapshot : newest
+  ), null);
+}
+
 function countdown(epoch) {
   const seconds = Math.max(0, Number(epoch) - Math.floor(Date.now() / 1000));
   const days = Math.floor(seconds / 86400);
@@ -67,20 +82,21 @@ process.stdin.on('end', () => {
   try {
     const hook = JSON.parse(input || '{}');
     const transcriptPath = hook.transcript_path;
-    const snapshot = newestSnapshot(transcriptPath);
+    const liveSnapshot = newestSnapshot(transcriptPath);
+    const state = loadState();
+    const snapshot = liveSnapshot || newestSavedSnapshot(state);
     if (!snapshot) return;
 
-    fs.mkdirSync(dataDir, { recursive: true });
-    let state = { snapshots: {} };
-    try { state = JSON.parse(fs.readFileSync(snapshotsPath, 'utf8')); } catch {}
-    if (!state || typeof state !== 'object') state = { snapshots: {} };
     if (!state.snapshots || typeof state.snapshots !== 'object') state.snapshots = {};
-    state.snapshots[transcriptPath] = { ...snapshot, recorded_at: new Date().toISOString() };
-    atomicWrite(snapshotsPath, state);
+    if (liveSnapshot) {
+      fs.mkdirSync(dataDir, { recursive: true });
+      state.snapshots[transcriptPath] = { ...snapshot, recorded_at: new Date().toISOString() };
+      atomicWrite(snapshotsPath, state);
+    }
 
     // Stop hook output is rendered by Codex as a UI warning.  Do not emit it
     // for every tool call: PostToolUse runs too often for a useful status read.
-    if (hook.hook_event_name === 'Stop') {
+    if (hook.hook_event_name === 'Stop' || hook.hook_event_name === 'SessionStart') {
       process.stdout.write(JSON.stringify({ systemMessage: stopMessage(snapshot) }));
     }
   } catch {

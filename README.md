@@ -23,7 +23,7 @@ node "$PLUGIN_ROOT/scripts/configure-statusline.js"
 
 Feche e abra o Codex após instalar. O rodapé nativo passa a mostrar modelo, contexto, tokens usados, branch e diretório. Quando a conta expuser limites compatíveis, os itens de 5h e semanal também aparecem.
 
-O comando de configuração modifica apenas `tui.status_line` em `~/.codex/config.toml`. Você também pode escolher/reordenar os itens interativamente com `/statusline` dentro do Codex. Ao fim de cada turno, o plugin mostra na TUI uma linha com a cota efetiva da conta, o tempo até o reset e o percentual do contexto da sessão — inclusive para planos cuja janela não seja exibida pelo rodapé nativo.
+O comando de configuração modifica apenas `tui.status_line` em `~/.codex/config.toml`. Você também pode escolher/reordenar os itens interativamente com `/statusline` dentro do Codex. Ao iniciar, o plugin mostra na TUI o último estado salvo; ao fim de cada turno, atualiza a linha com a cota efetiva da conta, o tempo até o reset e o percentual do contexto da sessão — inclusive para planos cuja janela não seja exibida pelo rodapé nativo.
 
 Para atualizar:
 
