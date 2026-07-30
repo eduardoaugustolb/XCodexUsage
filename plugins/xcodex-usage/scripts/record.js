@@ -72,7 +72,7 @@ function stopMessage(snapshot) {
   const quotaWindow = Number(quota?.window_minutes) || 0;
   const quotaLabel = quotaWindow ? `cota:${Math.round(quotaWindow / 1440)}d ${Math.round(Number(quota.used_percent) || 0)}%` : null;
   const reset = quota?.resets_at ? `reset:${countdown(quota.resets_at)}` : null;
-  return ['XCodexUsage', quotaLabel, reset, context].filter(Boolean).join(' · ');
+  return ['⚡ XCODEX USAGE', quotaLabel, reset, context].filter(Boolean).join('  │  ');
 }
 
 let input = '';
