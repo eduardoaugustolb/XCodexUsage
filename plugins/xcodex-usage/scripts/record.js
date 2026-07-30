@@ -12,6 +12,14 @@ const crypto = require('node:crypto');
 const dataDir = path.join(os.homedir(), '.codex', 'data', 'xcodex-usage');
 const snapshotsPath = path.join(dataDir, 'snapshots.json');
 
+// Codex may finish consuming hook output while the process is flushing it.
+// Treat a broken output pipe as a successful no-op; a telemetry hook must
+// never make the agent turn fail.
+process.stdout.on('error', () => { process.exitCode = 0; });
+process.stdin.on('error', () => { process.exitCode = 0; });
+process.on('uncaughtException', () => { process.exit(0); });
+process.on('unhandledRejection', () => { process.exit(0); });
+
 function newestSnapshot(transcriptPath) {
   if (!transcriptPath) return null;
   let body;
@@ -72,7 +80,7 @@ function stopMessage(snapshot) {
   const quotaWindow = Number(quota?.window_minutes) || 0;
   const quotaLabel = quotaWindow ? `cota:${Math.round(quotaWindow / 1440)}d ${Math.round(Number(quota.used_percent) || 0)}%` : null;
   const reset = quota?.resets_at ? `reset:${countdown(quota.resets_at)}` : null;
-  return ['⚡ XCODEX USAGE', quotaLabel, reset, context].filter(Boolean).join('  │  ');
+  return ['🟨 XCODEX USAGE', quotaLabel, reset, context].filter(Boolean).join('  │  ');
 }
 
 let input = '';
