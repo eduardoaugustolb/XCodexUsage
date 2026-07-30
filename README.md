@@ -8,16 +8,39 @@ O Codex não tem a API de `statusLine` do Claude Code. Por isso o equivalente é
 Codex │ ██░░░░░░░░ 16% · reinicia:6d02h │ sessões:3 │ entrada:4.31M │ cache:3.96M │ saída:33.3k │ raciocínio:7.7k
 ```
 
-## Instalação local
+## Instalação manual
 
-No diretório deste repositório:
+Pré-requisito: [Codex CLI](https://developers.openai.com/codex) instalado e disponível como `codex` no terminal.
+
+Instale o plugin público diretamente do GitHub:
+
+```bash
+codex plugin marketplace add eduardoaugustolb/XCodexUsage --ref main
+codex plugin add xcodex-usage@xcodex-usage
+codex plugin list --marketplace xcodex-usage --json
+```
+
+Abra uma nova thread/sessão do Codex após instalar. Na primeira interação concluída, os hooks criam `~/.codex/data/xcodex-usage/snapshots.json`.
+
+Para atualizar:
+
+```bash
+codex plugin marketplace upgrade xcodex-usage
+codex plugin add xcodex-usage@xcodex-usage
+```
+
+Para desinstalar sem remover o marketplace:
+
+```bash
+codex plugin remove xcodex-usage@xcodex-usage
+```
+
+Em desenvolvimento, a fonte local também pode ser usada:
 
 ```bash
 codex plugin marketplace add .
 codex plugin add xcodex-usage@xcodex-usage
 ```
-
-Reinicie o Codex após a instalação. Na primeira interação, os hooks criam `~/.codex/data/xcodex-usage/snapshots.json`.
 
 Para consultar o resumo:
 
@@ -52,9 +75,17 @@ Valide o manifesto antes de instalar:
 python3 /home/eduardoaugusto/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/xcodex-usage
 ```
 
-## Instalação por agente de IA
+## Uso por agente de IA
 
-Agentes podem seguir o procedimento autocontido em [INSTALL_GUIDE_AI.md](INSTALL_GUIDE_AI.md). Basta enviar ao agente o link raw desse arquivo com um pedido de instalar, atualizar ou desinstalar.
+Envie ao agente um dos prompts abaixo com o link raw do [guia operacional](AI_AGENT_GUIDE.md):
+
+```text
+Instala isso no meu Codex: https://raw.githubusercontent.com/eduardoaugustolb/XCodexUsage/refs/heads/main/AI_AGENT_GUIDE.md
+Atualiza isso: https://raw.githubusercontent.com/eduardoaugustolb/XCodexUsage/refs/heads/main/AI_AGENT_GUIDE.md
+Desinstala isso: https://raw.githubusercontent.com/eduardoaugustolb/XCodexUsage/refs/heads/main/AI_AGENT_GUIDE.md
+```
+
+O guia instrui o agente a validar a origem, usar os comandos oficiais do Codex, respeitar permissões para alterar `~/.codex` e não executar código trazido pelo arquivo raw.
 
 ## Créditos
 

@@ -1,4 +1,4 @@
-# XCodexUsage — guia de instalação para agentes de IA
+# XCodexUsage — guia operacional para agentes de IA
 
 Este arquivo é um procedimento executável por um agente com acesso ao terminal. Ele atende pedidos em linguagem natural como:
 
@@ -15,13 +15,13 @@ plugin: xcodex-usage
 marketplace: xcodex-usage
 source: eduardoaugustolb/XCodexUsage
 ref: main
-guide: INSTALL_GUIDE_AI.md
+guide: AI_AGENT_GUIDE.md
 ```
 
 Link raw canônico deste guia:
 
 ```text
-https://raw.githubusercontent.com/eduardoaugustolb/XCodexUsage/refs/heads/main/INSTALL_GUIDE_AI.md
+https://raw.githubusercontent.com/eduardoaugustolb/XCodexUsage/refs/heads/main/AI_AGENT_GUIDE.md
 ```
 
 ## Regras de interpretação
