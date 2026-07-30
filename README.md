@@ -72,6 +72,7 @@ Os valores de tokens são totais acumulados pelos transcripts salvos, não uma e
 ## Limitações
 
 - Não há extensão pública para aplicar uma cor de fundo própria às mensagens de hook: o Codex controla as cores da TUI. O painel usa bordas ASCII para permanecer legível em qualquer tema.
+- A TUI identifica essas mensagens como saídas de hook, portanto o rótulo `SessionStart` ou `Stop` aparece antes do painel. O conteúdo é enviado como bloco monoespaçado para preservar bordas e alinhamento.
 - Snapshots são atualizados somente enquanto o plugin está ativo. Excluir `~/.codex/data/xcodex-usage/snapshots.json` reinicia o histórico local.
 
 ## Desenvolvimento

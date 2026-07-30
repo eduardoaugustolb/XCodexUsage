@@ -86,7 +86,12 @@ function panel(snapshot) {
   const body = `${quotaText} | ${resetText} | ${contextText}`;
   const width = Math.max(52, body.length + 4);
   const line = `+${'-'.repeat(width - 2)}+`;
-  return [line, '| XCODEX USAGE'.padEnd(width - 1) + '|', `| ${body.padEnd(width - 4)} |`, line].join('\n');
+  // Hook system messages are rendered as Markdown by the TUI. A fenced `text`
+  // block keeps the border and padding monospaced instead of letting Markdown
+  // interpret the vertical bars as table syntax.
+  // The TUI writes the hook label immediately before this message. Keep a
+  // leading newline so the top border never shares the label's line.
+  return ['', '```text', line, '| XCODEX USAGE'.padEnd(width - 1) + '|', `| ${body.padEnd(width - 4)} |`, line, '```'].join('\n');
 }
 
 let input = '';
